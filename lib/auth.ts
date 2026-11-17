@@ -1,23 +1,85 @@
-import { getServerSession as nextAuthGetServerSession } from "next-auth";
+import { AuthOptions, getServerSession as nextAuthGetServerSession } from "next-auth";
+import CredentialsProvider from "next-auth/providers/credentials";
+import bcrypt from "bcryptjs";
+import prisma from "@/lib/prisma";
 import { redirect } from "next/navigation";
-import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 
-export { authOptions };
+export const authOptions: AuthOptions = {
+  providers: [
+    CredentialsProvider({
+      name: "Credentials",
+      credentials: {
+        email: { label: "Email", type: "email" },
+        password: { label: "Contraseña", type: "password" },
+      },
+      async authorize(credentials) {
+        if (!credentials?.email || !credentials?.password) {
+          throw new Error("Por favor ingresa tu email y contraseña");
+        }
 
-/**
- * Helper to get the current server session.
- * Use this in Server Components, Route Handlers, and Server Actions.
- */
+        const user = await prisma.user.findUnique({
+          where: { email: credentials.email },
+        });
+
+        if (!user || !user.password) {
+          throw new Error("Credenciales incorrectas");
+        }
+
+        const isValid = await bcrypt.compare(
+          credentials.password,
+          user.password
+        );
+
+        if (!isValid) {
+          throw new Error("Credenciales incorrectas");
+        }
+
+        return {
+          id: user.id,
+          name: user.name,
+          email: user.email,
+          role: user.role as string,
+        };
+      },
+    }),
+  ],
+
+  session: {
+    strategy: "jwt",
+    maxAge: 30 * 24 * 60 * 60, // 30 días
+  },
+
+  callbacks: {
+    async jwt({ token, user }) {
+      if (user) {
+        token.id = user.id;
+        token.role = (user as any).role;
+        token.name = user.name;
+      }
+      return token;
+    },
+
+    async session({ session, token }) {
+      if (session.user) {
+        session.user.id = token.id as string;
+        session.user.role = token.role as string;
+        session.user.name = token.name as string;
+      }
+      return session;
+    },
+  },
+
+  pages: {
+    signIn: "/login",
+  },
+
+  secret: process.env.NEXTAUTH_SECRET,
+};
+
 export async function getServerSession() {
   return await nextAuthGetServerSession(authOptions);
 }
 
-/**
- * Verifies that a session exists (and optionally that the user has the required role).
- * Redirects to /login if not authenticated or /dashboard if role is insufficient.
- *
- * @param role - Optional required role ("ADMIN" | "TEACHER"). If omitted, any authenticated user is allowed.
- */
 export async function requireAuth(role?: "ADMIN" | "TEACHER") {
   const session = await getServerSession();
 
@@ -25,8 +87,7 @@ export async function requireAuth(role?: "ADMIN" | "TEACHER") {
     redirect("/login");
   }
 
-  if (role && session.user.role !== role && session.user.role !== "ADMIN") {
-    // ADMIN can access everything; others are redirected if role doesn't match
+  if (role && (session.user as any).role !== role && (session.user as any).role !== "ADMIN") {
     redirect("/dashboard");
   }
 
