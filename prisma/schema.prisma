@@ -1,0 +1,261 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// ─── Enums ────────────────────────────────────────────────────────────────────
+
+enum Role {
+  ADMIN
+  TEACHER
+}
+
+enum StudentStatus {
+  ACTIVE
+  INACTIVE
+}
+
+enum AttendanceStatus {
+  PRESENTE
+  AUSENTE
+  TARDANZA
+  EXCUSA
+}
+
+// ─── Models ───────────────────────────────────────────────────────────────────
+
+model User {
+  id        String   @id @default(cuid())
+  name      String
+  email     String   @unique
+  password  String
+  role      Role     @default(TEACHER)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  schoolMembers       SchoolMember[]
+  teacherAssignments  TeacherAssignment[]
+  classSessions       ClassSession[]
+  observations        Observation[]
+  auditLogs           AuditLog[]
+  monthlyWorkSummaries MonthlyWorkSummary[]
+
+  @@map("users")
+}
+
+model School {
+  id        String   @id @default(cuid())
+  name      String
+  address   String?
+  phone     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  members  SchoolMember[]
+  courses  Course[]
+  students Student[]
+  subjects Subject[]
+
+  @@map("schools")
+}
+
+model SchoolMember {
+  id        String   @id @default(cuid())
+  userId    String
+  schoolId  String
+  role      Role     @default(TEACHER)
+  createdAt DateTime @default(now())
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  school School @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, schoolId])
+  @@map("school_members")
+}
+
+model Course {
+  id        String   @id @default(cuid())
+  schoolId  String
+  name      String
+  level     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  school   School    @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  sections Section[]
+
+  @@map("courses")
+}
+
+model Section {
+  id        String   @id @default(cuid())
+  courseId  String
+  name      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  course               Course               @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  enrollments          Enrollment[]
+  teacherAssignments   TeacherAssignment[]
+  classSessions        ClassSession[]
+  monthlyWorkSummaries MonthlyWorkSummary[]
+
+  @@map("sections")
+}
+
+model Subject {
+  id          String   @id @default(cuid())
+  schoolId    String
+  name        String
+  description String?
+  isArchived  Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  school               School               @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  teacherAssignments   TeacherAssignment[]
+  classSessions        ClassSession[]
+  observations         Observation[]
+  monthlyWorkSummaries MonthlyWorkSummary[]
+
+  @@map("subjects")
+}
+
+model TeacherAssignment {
+  id        String   @id @default(cuid())
+  userId    String
+  sectionId String
+  subjectId String
+  schoolId  String
+  createdAt DateTime @default(now())
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  section Section @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+  subject Subject @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, sectionId, subjectId])
+  @@map("teacher_assignments")
+}
+
+model Student {
+  id             String        @id @default(cuid())
+  schoolId       String
+  firstName      String
+  lastName       String
+  enrollmentCode String?
+  status         StudentStatus @default(ACTIVE)
+  isDeleted      Boolean       @default(false)
+  deletedAt      DateTime?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  school      School       @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  enrollments Enrollment[]
+  attendances Attendance[]
+  observations Observation[]
+
+  @@map("students")
+}
+
+model Enrollment {
+  id         String    @id @default(cuid())
+  studentId  String
+  sectionId  String
+  enrolledAt DateTime  @default(now())
+  leftAt     DateTime?
+
+  student Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  section Section @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+
+  @@unique([studentId, sectionId])
+  @@map("enrollments")
+}
+
+model ClassSession {
+  id          String   @id @default(cuid())
+  schoolId    String
+  userId      String
+  sectionId   String
+  subjectId   String
+  sessionDate DateTime @db.Date
+  createdAt   DateTime @default(now())
+
+  teacher     User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  section     Section      @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+  subject     Subject      @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  attendances Attendance[]
+
+  @@unique([sectionId, subjectId, sessionDate, userId])
+  @@map("class_sessions")
+}
+
+model Attendance {
+  id             String           @id @default(cuid())
+  studentId      String
+  classSessionId String
+  status         AttendanceStatus
+  note           String?
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+
+  student      Student      @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  classSession ClassSession @relation(fields: [classSessionId], references: [id], onDelete: Cascade)
+
+  @@unique([studentId, classSessionId])
+  @@map("attendances")
+}
+
+model MonthlyWorkSummary {
+  id         String   @id @default(cuid())
+  userId     String
+  sectionId  String
+  subjectId  String
+  month      Int // 1-12 (agosto=8 inicio año escolar RD, junio=6 fin)
+  year       Int
+  workedDays Int      @default(0)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  section Section @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+  subject Subject @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, sectionId, subjectId, month, year])
+  @@map("monthly_work_summaries")
+}
+
+model Observation {
+  id              String   @id @default(cuid())
+  studentId       String
+  userId          String
+  subjectId       String?
+  observationDate DateTime @db.Date
+  description     String
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  student Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  subject Subject? @relation(fields: [subjectId], references: [id], onDelete: SetNull)
+
+  @@map("observations")
+}
+
+model AuditLog {
+  id          String   @id @default(cuid())
+  userId      String
+  action      String
+  targetTable String
+  targetId    String?
+  details     Json?
+  createdAt   DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("audit_logs")
+}
