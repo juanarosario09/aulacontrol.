@@ -33,7 +33,7 @@ export function LoginForm() {
     setAuthError(null);
 
     const result = await signIn("credentials", {
-      email: data.email,
+      email: data.email.trim(),
       password: data.password,
       redirect: false,
     });

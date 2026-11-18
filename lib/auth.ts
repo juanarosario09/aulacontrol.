@@ -14,33 +14,40 @@ export const authOptions: AuthOptions = {
       },
       async authorize(credentials) {
         if (!credentials?.email || !credentials?.password) {
-          throw new Error("Por favor ingresa tu email y contraseña");
+          return null;
         }
 
-        const cleanEmail = credentials.email.trim();
-        const user = await prisma.user.findFirst({
-          where: { email: { equals: cleanEmail, mode: 'insensitive' } },
-        });
+        try {
+          const cleanEmail = credentials.email.trim();
+          const user = await prisma.user.findFirst({
+            where: { email: { equals: cleanEmail, mode: 'insensitive' } },
+          });
 
-        if (!user || !user.password) {
-          throw new Error("Credenciales incorrectas");
+          if (!user || !user.password) {
+            console.error('[AUTH] Usuario no encontrado:', cleanEmail);
+            return null;
+          }
+
+          const isValid = await bcrypt.compare(
+            credentials.password,
+            user.password
+          );
+
+          if (!isValid) {
+            console.error('[AUTH] Contraseña no coincide para:', cleanEmail);
+            return null;
+          }
+
+          return {
+            id: user.id,
+            name: user.name,
+            email: user.email,
+            role: user.role as string,
+          };
+        } catch (err: any) {
+          console.error('[AUTH_DB_ERROR]:', err?.message || err);
+          return null;
         }
-
-        const isValid = await bcrypt.compare(
-          credentials.password,
-          user.password
-        );
-
-        if (!isValid) {
-          throw new Error("Credenciales incorrectas");
-        }
-
-        return {
-          id: user.id,
-          name: user.name,
-          email: user.email,
-          role: user.role as string,
-        };
       },
     }),
   ],
