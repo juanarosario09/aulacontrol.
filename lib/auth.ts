@@ -17,8 +17,9 @@ export const authOptions: AuthOptions = {
           throw new Error("Por favor ingresa tu email y contraseña");
         }
 
-        const user = await prisma.user.findUnique({
-          where: { email: credentials.email },
+        const cleanEmail = credentials.email.trim();
+        const user = await prisma.user.findFirst({
+          where: { email: { equals: cleanEmail, mode: 'insensitive' } },
         });
 
         if (!user || !user.password) {
