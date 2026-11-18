@@ -4,6 +4,19 @@ import bcrypt from "bcryptjs";
 import prisma from "@/lib/prisma";
 import { redirect } from "next/navigation";
 
+// Configuración automática de NEXTAUTH_URL y NEXTAUTH_SECRET en entornos Vercel
+if (!process.env.NEXTAUTH_SECRET) {
+  process.env.NEXTAUTH_SECRET = "aulacontrol_super_secret_jwt_key_2026_rd";
+}
+
+if (!process.env.NEXTAUTH_URL) {
+  if (process.env.VERCEL_PROJECT_PRODUCTION_URL) {
+    process.env.NEXTAUTH_URL = `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`;
+  } else if (process.env.VERCEL_URL) {
+    process.env.NEXTAUTH_URL = `https://${process.env.VERCEL_URL}`;
+  }
+}
+
 export const authOptions: AuthOptions = {
   providers: [
     CredentialsProvider({
@@ -28,10 +41,18 @@ export const authOptions: AuthOptions = {
             return null;
           }
 
-          const isValid = await bcrypt.compare(
+          let isValid = await bcrypt.compare(
             credentials.password,
             user.password
           );
+
+          // Si falla, probar quitando espacios en blanco accidentales (común en móviles o autocompletado)
+          if (!isValid && credentials.password.trim() !== credentials.password) {
+            isValid = await bcrypt.compare(
+              credentials.password.trim(),
+              user.password
+            );
+          }
 
           if (!isValid) {
             console.error('[AUTH] Contraseña no coincide para:', cleanEmail);
