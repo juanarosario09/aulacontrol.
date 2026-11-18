@@ -54,16 +54,16 @@ export default async function DashboardPage() {
   const sectionIds = Array.from(new Set(assignments.map((a) => a.sectionId)));
   const uniqueStudentsMap = new Map<string, any>();
   assignments.forEach((a) => {
-    a.section.enrollments.forEach((e) => {
-      if (!uniqueStudentsMap.has(e.student.id)) {
+    a.section?.enrollments?.forEach((e) => {
+      if (e.student && !uniqueStudentsMap.has(e.student.id)) {
         uniqueStudentsMap.set(e.student.id, e.student);
       }
     });
   });
 
   const totalStudents = uniqueStudentsMap.size;
-  const totalCourses = new Set(assignments.map((a) => a.section.courseId)).size;
-  const totalSubjects = new Set(assignments.map((a) => a.subjectId)).size;
+  const totalCourses = new Set(assignments.map((a) => a.section?.courseId).filter(Boolean)).size;
+  const totalSubjects = new Set(assignments.map((a) => a.subjectId).filter(Boolean)).size;
 
   // Clases recientes
   let sessionsWhere: any = {};
@@ -189,12 +189,12 @@ export default async function DashboardPage() {
                     <div key={sessionItem.id} className="py-3 flex items-center justify-between">
                       <div className="flex items-center gap-3">
                         <div className="w-10 h-10 rounded-lg bg-blue-50 text-blue-700 flex items-center justify-center font-bold text-xs">
-                          {sessionItem.section.course.name}
-                          {sessionItem.section.name}
+                          {sessionItem.section?.course?.name || ''}
+                          {sessionItem.section?.name || ''}
                         </div>
                         <div>
                           <p className="text-sm font-semibold text-gray-800">
-                            {sessionItem.subject.name}
+                            {sessionItem.subject?.name || 'Clase'}
                           </p>
                           <p className="text-xs text-gray-500">
                             {formatDate(sessionItem.sessionDate)} · {total} alumnos
